@@ -1,0 +1,4 @@
+[submodule "mpv"]
+	path = mpv
+	url = https://github.com/mpv-player/mpv.git
+	branch = v0.41.0
