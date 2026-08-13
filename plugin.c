@@ -4,15 +4,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <unistd.h>
 
-#include <mpv/client.h>
-#include <mpv/stream_cb.h>
+#ifdef _WIN32
+	#include <windows.h>
+#else
+	#include <sys/mman.h>
+	#include <unistd.h>
+#endif
+
+#ifdef _WIN32
+	#define MPV_CPLUGIN_DYNAMIC_SYM
+#endif
+
+#include "mpv/client.h"
+#include "mpv/stream_cb.h"
 
 struct shm_state {
 	// The underlying shared memory object
+#ifdef _WIN32
+	HANDLE shm;
+#else
 	int shm;
+#endif
 	// A pointer to the data
 	char *ptr;
 	// The current offset into the data
@@ -58,9 +71,13 @@ static int64_t size_cb(void *cookie) {
 
 static void close_cb(void *cookie) {
 	struct shm_state *st = cookie;
-
+#ifdef _WIN32
+	UnmapViewOfFile(st->ptr);
+	CloseHandle(st->shm);
+#else
 	munmap(st->ptr, st->len);
 	close(st->shm);
+#endif
 
 	free(st);
 }
@@ -72,16 +89,35 @@ static int open_cb(void *_udata, char *uri, mpv_stream_cb_info *info) {
 	uint64_t len = 0;
 	size_t parse_off = 0;
 
+#ifdef _WIN32
+	sscanf_s(uri, "shm://%"SCNx64"+%"SCNx64"/%n", &off, &len, &parse_off);
+#else
 	sscanf(uri, "shm://%"SCNx64"+%"SCNx64"/%n", &off, &len, &parse_off);
+#endif
 
 	if (parse_off == 0) {
 		printf("mpv-shm - invalid uri %s\n", uri);
 		return MPV_ERROR_LOADING_FAILED;
 	}
 
-	const char *shm_name = uri + parse_off - 1;
-	
-	int shm = shm_open(shm_name, O_RDONLY);
+	const char *shm_name = uri + parse_off;
+
+#ifdef _WIN32
+	HANDLE shm = OpenFileMapping(FILE_MAP_READ, FALSE, shm_name);
+
+	if (shm == NULL) {
+		printf("mpv-shm - OpenFileMapping(): %lu\n", GetLastError());
+		return MPV_ERROR_LOADING_FAILED;
+	}
+
+	char *ptr = MapViewOfFile(shm, FILE_MAP_READ, 0, 0, len);
+
+	if (ptr == NULL) {
+		printf("mpv-shm - MapViewOfFile(): %lu\n", GetLastError());
+		return MPV_ERROR_LOADING_FAILED;
+	}
+#else
+	int shm = shm_open(shm_name - 1, O_RDONLY);
 
 	if (shm < 0) {
 		printf("mpv-shm - shm_open(): %s\n", strerror(errno));
@@ -94,6 +130,7 @@ static int open_cb(void *_udata, char *uri, mpv_stream_cb_info *info) {
 		printf("mpv-shm - mmap(): %s\n", strerror(errno));
 		return MPV_ERROR_LOADING_FAILED;
 	}
+#endif
 
 	struct shm_state *st = malloc(sizeof(struct shm_state));
 
@@ -112,6 +149,9 @@ static int open_cb(void *_udata, char *uri, mpv_stream_cb_info *info) {
 	return 0;
 }
 
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
 int mpv_open_cplugin(mpv_handle *handle) {
 	int res = mpv_stream_cb_add_ro(handle, "shm", NULL, open_cb);
 
