@@ -3,3 +3,6 @@
 	url = https://github.com/mpv-player/mpv.git
 	branch = v0.41.0
 	shallow = true
+[submodule "shmshim"]
+	path = shmshim
+	url = https://github.com/dspeyrer/shmshim.git
