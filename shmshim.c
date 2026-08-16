@@ -19,7 +19,7 @@
 struct shm_shim_shm {
 	uint8_t *ptr;
 #ifdef _WIN32
-	HANDLE handle;	
+	HANDLE handle;
 #else
 	char *name;
 	size_t len;
@@ -33,14 +33,15 @@ uint8_t **shm_shim_create(const uint8_t *name, size_t name_len, size_t shm_len) 
 #ifdef _WIN32
 
 	shm->ptr = NULL;
-	shm->handle = NULL;
 
-	int wname_len = 1 + MultiByteToWideChar(CP_UTF8, 0, name, name_len, NULL, 0);
-	char *wname = malloc(wname_len);
-	MultiByteToWideChar(CP_UTF8, 0, name, name_len, wname, wname_len);
+	int wname_len = MultiByteToWideChar(CP_UTF8, 0, (const char *)name, name_len, NULL, 0);
+	uint16_t *wname = malloc((wname_len + 1) * sizeof(uint16_t));
+	MultiByteToWideChar(CP_UTF8, 0, (const char *)name, name_len, wname, wname_len);
 	wname[wname_len] = 0;
-	
+
 	shm->handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, shm_len << 32, shm_len, wname);
+
+	free(wname);
 
 	if (shm->handle == NULL) {
 		goto failure;
@@ -61,7 +62,7 @@ uint8_t **shm_shim_create(const uint8_t *name, size_t name_len, size_t shm_len) 
 	shm->name = malloc(name_len + 2);
 	shm->name[0] = '/';
 	memcpy(shm->name + 1, name, name_len);
-	shm->name[name_len + 2] = 0;
+	shm->name[name_len + 1] = 0;
 
 	shm_unlink(shm->name);
 	shm->fd = shm_open(shm->name, O_RDWR | O_CREAT, 00660);
@@ -97,11 +98,11 @@ void shm_shim_destroy(uint8_t **map) {
 #ifdef _WIN32
 
 	if (shm->ptr != NULL) {
-		UnmapViewOfFile(ptr);
+		UnmapViewOfFile(shm->ptr);
 	}
 
 	if (shm->handle != NULL) {
-		CloseHandle(shm);
+		CloseHandle(shm->handle);
 	}
 
 #else

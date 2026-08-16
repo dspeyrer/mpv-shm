@@ -4,4 +4,5 @@ plugin.so
 plugin.dll
 
 example-c
+example-c.exe
 example-rs

@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
 		goto cleanup_shm;
 	}
 
-	printf("map available at shm://%llx/%s\n", len, argv[2]);
+	printf("map available at shm://%zx/%s\n", (size_t )len, argv[2]);
 	printf("Press any key to exit...\n");
 
 	getc(stdin);
