@@ -85,14 +85,13 @@ static void close_cb(void *cookie) {
 static int open_cb(void *_udata, char *uri, mpv_stream_cb_info *info) {
 	(void) _udata;
 
-	uint64_t off = 0;
 	uint64_t len = 0;
 	size_t parse_off = 0;
 
 #ifdef _WIN32
-	sscanf_s(uri, "shm://%"SCNx64"+%"SCNx64"/%n", &off, &len, &parse_off);
+	sscanf_s(uri, "shm://%"SCNx64"/%n", &len, &parse_off);
 #else
-	sscanf(uri, "shm://%"SCNx64"+%"SCNx64"/%n", &off, &len, &parse_off);
+	sscanf(uri, "shm://%"SCNx64"/%n", &len, &parse_off);
 #endif
 
 	if (parse_off == 0) {
@@ -124,7 +123,7 @@ static int open_cb(void *_udata, char *uri, mpv_stream_cb_info *info) {
 		return MPV_ERROR_LOADING_FAILED;
 	}
 
-	char *ptr = mmap(NULL, len, PROT_READ, MAP_SHARED, shm, off);
+	char *ptr = mmap(NULL, len, PROT_READ, MAP_SHARED, shm, 0);
 
 	if (ptr == MAP_FAILED) {
 		printf("mpv-shm - mmap(): %s\n", strerror(errno));

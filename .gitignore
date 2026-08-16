@@ -1,5 +1,7 @@
+shmshim.o
+
 plugin.so
 plugin.dll
 
-example
-example.exe
+example-c
+example-rs

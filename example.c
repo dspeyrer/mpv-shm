@@ -1,17 +1,8 @@
-#define _FILE_OFFSET_BITS 64
+#include "shmshim.h"
 
 #include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-
-#ifdef _WIN32
-	#include <windows.h>
-#else
-	#include <sys/mman.h>
-	#include <unistd.h>
-#endif
 
 int main(int argc, char **argv) {
 	int ret = 1;
@@ -42,76 +33,32 @@ int main(int argc, char **argv) {
 
 	rewind(f);
 
-#ifdef _WIN32
-	HANDLE shm = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, len, argv[2]);
+	uint8_t **ptr = shm_shim_create((const uint8_t *)argv[2], strlen(argv[2]), len);
 
-	if (shm == NULL) {
-		printf("CreateFileMapping(): %lu\n", GetLastError());
+	if (!ptr) {
+		printf("shm_shim_create(): ERROR\n");
 		goto cleanup_file;
 	}
 
-	char *ptr = MapViewOfFile(shm, FILE_MAP_ALL_ACCESS, 0, 0, len);
-
-	if (ptr == NULL) {
-		printf("MapViewOfFile(): %lu\n", GetLastError());
-		goto cleanup_shm;
-	}
-#else
-	size_t shm_name_len = strlen(argv[2]);
-	char *shm_name = malloc(shm_name_len + 2);
-	shm_name[0] = '/';
-	memcpy(shm_name + 1, argv[2], shm_name_len + 1);
-
-	shm_unlink(shm_name);
-	int shm = shm_open(shm_name, O_RDWR | O_CREAT);
-
-	if (shm < 0) {
-		printf("shm_open(): %s\n", strerror(errno));
-		goto cleanup_shm_name;
-	}
-
-	int res = ftruncate(shm, len);
-
-	if (res < 0) {
-		printf("ftruncate(): %s\n", strerror(errno));
-		goto cleanup_shm;
-	}
-
-	char *ptr = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, shm, 0);
-
-	if (ptr == MAP_FAILED) {
-		printf("mmap(): %s\n", strerror(errno));
-		goto cleanup_shm;
-	}
-#endif
-
-	size_t n = fread(ptr, len, 1, f);
+	size_t n = fread(*ptr, len, 1, f);
 
 	if (n == 0) {
 		printf("fread(): 0\n");
-		goto cleanup_map;
+		goto cleanup_shm;
 	}
 
-	printf("map available at shm://0+%llx/%s\n", len, argv[2]);
+	printf("map available at shm://%llx/%s\n", len, argv[2]);
 	printf("Press any key to exit...\n");
 
 	getc(stdin);
 
 	ret = 0;
-cleanup_map:
-#ifdef _WIN32
-	UnmapViewOfFile(ptr);
+
 cleanup_shm:
-	CloseHandle(shm);
-#else
-	munmap(ptr, len);
-cleanup_shm:
-	close(shm);
-	shm_unlink(shm_name);
-cleanup_shm_name:
-	free(shm_name);
-#endif
+	shm_shim_destroy(ptr);
+
 cleanup_file:
 	fclose(f);
+
 	return ret;
 }
