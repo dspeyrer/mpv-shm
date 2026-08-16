@@ -3,6 +3,7 @@ shmshim.o
 plugin.so
 plugin.dll
 
-example-c
-example-c.exe
-example-rs
+example
+example.exe
+
+/target
